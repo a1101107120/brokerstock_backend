@@ -1,7 +1,10 @@
 {
     "service": "brokerstock-backend",
-    "port": 8000,
+    "port": 8080,
     "build": {
         "builder": "docker"
+    },
+    "deploy": {
+        "start_command": "gunicorn --bind 0.0.0.0:8080 core.wsgi:application"
     }
 }
