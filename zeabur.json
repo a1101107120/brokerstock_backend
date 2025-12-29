@@ -1,8 +1,7 @@
 {
-  "service": "brokerstock-backend",
-  "port": 8000,
-  "build": {
-    "builder": "docker"
-  }
+    "service": "brokerstock-backend",
+    "port": 8000,
+    "build": {
+        "builder": "docker"
+    }
 }
-
