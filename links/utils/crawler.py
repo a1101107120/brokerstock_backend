@@ -216,69 +216,110 @@ def fetch_stock_main_force_data(stock_number, date_str=None):
     if not table:
         return {"buy_list": [], "sell_list": [], "date": date}
 
-    # Find the Buyers and Sellers sub-tables
-    # Instead of relying on rows[2], let's find all nested tables and check their headers
-    all_tables = table.find_all('table')
     buy_list = []
     sell_list = []
+    rows = table.find_all('tr')
 
-    found_sub_tables = []
-    for st in all_tables:
-        header_text = st.get_text()
-        if "買進" in header_text and "賣出" in header_text and "買賣超" in header_text:
-            found_sub_tables.append(st)
-
-    def parse_ranking_table(t):
-        items = []
-        r = t.find_all('tr')
-        for i, row in enumerate(r):
-            tds = row.find_all('td')
-            # Fubon's zco page usually has 5 columns: Broker, Buy, Sell, Net, Percent
-            if len(tds) < 5:
+    for row in rows:
+        tds = row.find_all('td')
+        # Check for the flat 10-column layout (5 columns for buy, 5 for sell)
+        if len(tds) == 10:
+            # Skip rows that are clearly headers or footers
+            if "合計" in row.text or "平均" in row.text or "買超券商" in row.text:
                 continue
 
-            # Skip if it's a header row (contains "券商" or "買進")
-            if "券商" in tds[0].text or "買進" in tds[1].text:
-                continue
+            def parse_broker_td(name_td, buy_td, sell_td, net_td, percent_td):
+                name = name_td.text.strip()
+                if not name or "券商" in name:
+                    return None
 
-            # Broker name usually inside GenLink2bkr script or just text
-            name_td = tds[0]
-            name = name_td.text.strip()
-            script = name_td.find('script')
-            if script and script.string:
-                m = re.search(
-                    r"GenLink2bkr\('([^']+)','([^']+)'\)", script.string)
-                if m:
-                    name = m.group(2)
+                # Try to get name from GenLink2bkr script if available
+                script = name_td.find('script')
+                if script and script.string:
+                    m = re.search(
+                        r"GenLink2bkr\('([^']+)','([^']+)'\)", script.string)
+                    if m:
+                        name = m.group(2)
 
-            try:
-                # Remove commas and handle negative numbers
-                buy_val = int(tds[1].text.strip().replace(',', ''))
-                sell_val = int(tds[2].text.strip().replace(',', ''))
-                net_val = int(tds[3].text.strip().replace(',', ''))
-                percent_val = tds[4].text.strip()
+                try:
+                    buy_val = int(buy_td.text.strip().replace(',', ''))
+                    sell_val = int(sell_td.text.strip().replace(',', ''))
+                    net_val = int(net_td.text.strip().replace(',', ''))
+                    percent_val = percent_td.text.strip()
 
-                # Basic validation: if all values are 0, it might be an empty row
-                if buy_val == 0 and sell_val == 0 and net_val == 0:
+                    if buy_val == 0 and sell_val == 0 and net_val == 0:
+                        return None
+
+                    return {
+                        "name": name,
+                        "buy": buy_val,
+                        "sell": sell_val,
+                        "net": net_val,
+                        "percent": percent_val
+                    }
+                except (ValueError, IndexError):
+                    return None
+
+            # Left side: Buyers
+            buy_item = parse_broker_td(tds[0], tds[1], tds[2], tds[3], tds[4])
+            if buy_item:
+                buy_list.append(buy_item)
+
+            # Right side: Sellers
+            sell_item = parse_broker_td(tds[5], tds[6], tds[7], tds[8], tds[9])
+            if sell_item:
+                sell_list.append(sell_item)
+
+    # Fallback: if flat layout didn't yield results, try looking for nested tables
+    if not buy_list and not sell_list:
+        all_tables = table.find_all('table')
+        found_sub_tables = []
+        for st in all_tables:
+            header_text = st.get_text()
+            if "買進" in header_text and "賣出" in header_text and "買賣超" in header_text:
+                found_sub_tables.append(st)
+
+        def parse_nested_table(t):
+            items = []
+            for r in t.find_all('tr'):
+                tds = r.find_all('td')
+                if len(tds) < 5:
                     continue
 
-                items.append({
-                    "name": name,
-                    "buy": buy_val,
-                    "sell": sell_val,
-                    "net": net_val,
-                    "percent": percent_val
-                })
-            except (ValueError, IndexError):
-                continue
-        return items
+                # Skip header rows
+                if "券商" in tds[0].text or "買進" in tds[1].text:
+                    continue
 
-    if len(found_sub_tables) >= 2:
-        buy_list = parse_ranking_table(found_sub_tables[0])
-        sell_list = parse_ranking_table(found_sub_tables[1])
-    elif len(found_sub_tables) == 1:
-        # If only one table found, it might be a different layout
-        buy_list = parse_ranking_table(found_sub_tables[0])
+                name = tds[0].text.strip()
+                script = tds[0].find('script')
+                if script and script.string:
+                    m = re.search(
+                        r"GenLink2bkr\('([^']+)','([^']+)'\)", script.string)
+                    if m:
+                        name = m.group(2)
+
+                try:
+                    buy_v = int(tds[1].text.strip().replace(',', ''))
+                    sell_v = int(tds[2].text.strip().replace(',', ''))
+                    net_v = int(tds[3].text.strip().replace(',', ''))
+                    if buy_v == 0 and sell_v == 0 and net_v == 0:
+                        continue
+                    items.append({
+                        "name": name,
+                        "buy": buy_v,
+                        "sell": sell_v,
+                        "net": net_v,
+                        "percent": tds[4].text.strip()
+                    })
+                except:
+                    continue
+            return items
+
+        if len(found_sub_tables) >= 2:
+            buy_list = parse_nested_table(found_sub_tables[0])
+            sell_list = parse_nested_table(found_sub_tables[1])
+        elif len(found_sub_tables) == 1:
+            buy_list = parse_nested_table(found_sub_tables[0])
 
     return {
         "buy_list": buy_list,
