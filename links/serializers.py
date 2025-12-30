@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Broker, StockRecord
+from links.models import Broker, StockRecord
 
 class BrokerSerializer(serializers.ModelSerializer):
     class Meta:

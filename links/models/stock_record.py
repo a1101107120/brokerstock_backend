@@ -1,5 +1,5 @@
 from django.db import models
-from .broker import Broker
+from links.models.broker import Broker
 
 class StockRecord(models.Model):
     broker = models.ForeignKey(Broker, on_delete=models.CASCADE, related_name='records')

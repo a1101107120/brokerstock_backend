@@ -1,15 +1,17 @@
 from rest_framework import viewsets, views, response, status
-from ..models import Broker
-from ..serializers import BrokerSerializer
-from ..utils.crawler import (
+from links.models import Broker
+from links.serializers import BrokerSerializer
+from links.utils.crawler import (
     generate_fubon_link, generate_fubon_detail_link, generate_histock_link,
     fetch_top_buyers, get_merged_data, find_previous_workdays_range,
     get_main_force_merged_data, fetch_stock_main_force_data
 )
 
+
 class BrokerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Broker.objects.all()
     serializer_class = BrokerSerializer
+
 
 class LiveCrawlerView(views.APIView):
     def get(self, request):
@@ -17,19 +19,23 @@ class LiveCrawlerView(views.APIView):
         brokers = Broker.objects.all()
         if not brokers.exists():
             return response.Response({"error": "No brokers found in database"}, status=status.HTTP_404_NOT_FOUND)
-            
+
         results = []
         for broker in brokers:
-            fubon_link = generate_fubon_link(number, broker.fbs_a, broker.fbs_b) if number else ""
-            fubon_detail_ranking = generate_fubon_detail_link(broker.fbs_a, broker.fbs_b)
-            histock_link = generate_histock_link(number, broker.stock_bno) if number else ""
-            
+            fubon_link = generate_fubon_link(
+                number, broker.fbs_a, broker.fbs_b) if number else ""
+            fubon_detail_ranking = generate_fubon_detail_link(
+                broker.fbs_a, broker.fbs_b)
+            histock_link = generate_histock_link(
+                number, broker.stock_bno) if number else ""
+
             try:
-                buy_data, date, sell_data = get_merged_data(broker.fbs_a, broker.fbs_b, broker.name)
+                buy_data, date, sell_data = get_merged_data(
+                    broker.fbs_a, broker.fbs_b, broker.name)
             except Exception as e:
                 print(f"Error crawling data for {broker.name}: {e}")
                 buy_data, date, sell_data = [], "Error", []
-            
+
             results.append({
                 "broker_name": broker.name,
                 "fubon_link": fubon_link,
@@ -42,26 +48,28 @@ class LiveCrawlerView(views.APIView):
                 "fbs_a": broker.fbs_a,
                 "fbs_b": broker.fbs_b
             })
-            
+
         return response.Response({
             "stock_number": number,
             "brokers_data": results
         })
+
 
 class MainForceCrawlerView(views.APIView):
     def get(self, request):
         number = request.query_params.get('number', '').strip()
         if not number:
             return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         brokers = Broker.objects.all()
         if not brokers.exists():
             return response.Response({"error": "No brokers found in database"}, status=status.HTTP_404_NOT_FOUND)
-            
+
         results = []
         for broker in brokers:
             try:
-                data = get_main_force_merged_data(number, broker.fbs_a, broker.fbs_b)
+                data = get_main_force_merged_data(
+                    number, broker.fbs_a, broker.fbs_b)
                 results.append({
                     "broker_name": broker.name,
                     "buy": data["buy"],
@@ -73,24 +81,25 @@ class MainForceCrawlerView(views.APIView):
                 })
             except Exception as e:
                 print(f"Error crawling main force data for {broker.name}: {e}")
-                
+
         results.sort(key=lambda x: x['net'], reverse=True)
         return response.Response({
             "stock_number": number,
             "main_force_data": results
         })
 
+
 class StockMainForceCrawlerView(views.APIView):
     def get(self, request):
         number = request.query_params.get('number', '').strip()
         if not number:
             return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         try:
             data = fetch_stock_main_force_data(number)
             if not data:
                 return response.Response({"error": "Failed to fetch stock main force data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
+
             return response.Response({
                 "stock_number": number,
                 "date": data["date"],
@@ -101,6 +110,7 @@ class StockMainForceCrawlerView(views.APIView):
             print(f"Error in StockMainForceCrawlerView: {e}")
             return response.Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class HistoryCrawlerView(views.APIView):
     def get(self, request):
         a = request.query_params.get('a')
@@ -108,21 +118,21 @@ class HistoryCrawlerView(views.APIView):
         days = request.query_params.get('days', 5)
         name = request.query_params.get('name', 'Unknown')
         mark = request.query_params.get('mark', '')
-        
+
         try:
             days = int(days)
         except ValueError:
             days = 5
-            
+
         link = generate_fubon_detail_link(a, b, days)
         buy_data, date, sell_data = fetch_top_buyers(link)
         date_range = find_previous_workdays_range(date, days)
-        
+
         for item in buy_data:
             item['histock_link'] = generate_histock_link(item['code'], mark)
         for item in sell_data:
             item['histock_link'] = generate_histock_link(item['code'], mark)
-            
+
         return response.Response({
             "broker_name": name,
             "date": date,
@@ -131,4 +141,3 @@ class HistoryCrawlerView(views.APIView):
             "sell_data": sell_data,
             "days": days
         })
-

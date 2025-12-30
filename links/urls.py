@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import BrokerViewSet, LiveCrawlerView, HistoryCrawlerView, StockRecordStatsView, MainForceCrawlerView, StockMainForceCrawlerView
+from links.views import BrokerViewSet, LiveCrawlerView, HistoryCrawlerView, StockRecordStatsView, MainForceCrawlerView, StockMainForceCrawlerView
 
 router = DefaultRouter()
 router.register(r'brokers', BrokerViewSet)

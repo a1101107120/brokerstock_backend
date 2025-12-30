@@ -1,7 +1,8 @@
 from rest_framework import views, response, status
 from django.db.models import Sum
-from ..models import StockRecord
-from ..serializers import StockRecordSerializer
+from links.models import StockRecord
+from links.serializers import StockRecordSerializer
+
 
 class StockRecordStatsView(views.APIView):
     def get(self, request):
@@ -18,4 +19,3 @@ class StockRecordStatsView(views.APIView):
             serializer.save()
             return response.Response(serializer.data, status=status.HTTP_201_CREATED)
         return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
