@@ -6,6 +6,7 @@ from links.utils.crawler import (
     fetch_top_buyers, get_merged_data, find_previous_workdays_range,
     get_main_force_merged_data, fetch_stock_main_force_data
 )
+from datetime import datetime
 
 
 class BrokerViewSet(viewsets.ReadOnlyModelViewSet):
@@ -37,12 +38,19 @@ class LiveCrawlerView(views.APIView):
             specific_stats = None
             if number:
                 try:
-                    specific_stats = get_main_force_merged_data(
+                    # Fetch from zco0 to ensure "any volume" is captured
+                    data = get_main_force_merged_data(
                         number, broker.fbs_a, broker.fbs_b)
-                    if specific_stats:
-                        total_buy += specific_stats.get('buy', 0)
-                        total_sell += specific_stats.get('sell', 0)
-                        total_net += specific_stats.get('net', 0)
+                    if data:
+                        net_val = data.get('net', 0)
+                        specific_stats = {
+                            "buy": data.get('buy', 0),
+                            "sell": data.get('sell', 0),
+                            "net": f"+{net_val}" if net_val > 0 else str(net_val)
+                        }
+                        total_buy += data.get('buy', 0)
+                        total_sell += data.get('sell', 0)
+                        total_net += net_val
                 except Exception as e:
                     print(
                         f"Error fetching specific stats for {number} at {broker.name}: {e}")
@@ -74,42 +82,8 @@ class LiveCrawlerView(views.APIView):
             "total_stats": {
                 "buy": total_buy,
                 "sell": total_sell,
-                "net": total_net
+                "net": f"+{total_net}" if total_net > 0 else str(total_net)
             } if number else None
-        })
-
-
-class MainForceCrawlerView(views.APIView):
-    def get(self, request):
-        number = request.query_params.get('number', '').strip()
-        if not number:
-            return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
-
-        brokers = Broker.objects.all()
-        if not brokers.exists():
-            return response.Response({"error": "No brokers found in database"}, status=status.HTTP_404_NOT_FOUND)
-
-        results = []
-        for broker in brokers:
-            try:
-                data = get_main_force_merged_data(
-                    number, broker.fbs_a, broker.fbs_b)
-                results.append({
-                    "broker_name": broker.name,
-                    "buy": data["buy"],
-                    "sell": data["sell"],
-                    "net": data["net"],
-                    "date": data["date"],
-                    "fubon_link": generate_fubon_link(number, broker.fbs_a, broker.fbs_b),
-                    "histock_link": generate_histock_link(number, broker.stock_bno)
-                })
-            except Exception as e:
-                print(f"Error crawling main force data for {broker.name}: {e}")
-
-        results.sort(key=lambda x: x['net'], reverse=True)
-        return response.Response({
-            "stock_number": number,
-            "main_force_data": results
         })
 
 
@@ -119,8 +93,11 @@ class StockMainForceCrawlerView(views.APIView):
         if not number:
             return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Get current date in YYYY-MM-DD format
+        date_str = datetime.now().strftime("%Y-%m-%d")
+
         try:
-            data = fetch_stock_main_force_data(number)
+            data = fetch_stock_main_force_data(number, date_str)
             if not data:
                 return response.Response({"error": "Failed to fetch stock main force data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

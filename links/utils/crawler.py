@@ -174,9 +174,13 @@ def get_main_force_merged_data(number, a, b):
     return data
 
 
-def fetch_stock_main_force_data(stock_number):
-    # Use the more standard URL format
-    link = f"https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco.djhtm?a={stock_number}"
+def fetch_stock_main_force_data(stock_number, date_str=None):
+    if not date_str:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+
+    # Use the specific URL format with date parameters e and f
+    link = f"https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco.djhtm?a={stock_number}&e={date_str}&f={date_str}"
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -191,8 +195,8 @@ def fetch_stock_main_force_data(stock_number):
 
     soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Extract date
-    date = datetime.now().strftime("%Y-%m-%d")
+    # Extract date from page if possible, otherwise use passed date
+    date = date_str
     date_div = soup.find('div', class_='t11')
     if date_div:
         date_match = re.search(r"(\d{4}/\d{1,2}/\d{1,2})", date_div.get_text())

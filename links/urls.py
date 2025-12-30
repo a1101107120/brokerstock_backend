@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from links.views import BrokerViewSet, LiveCrawlerView, HistoryCrawlerView, StockRecordStatsView, MainForceCrawlerView, StockMainForceCrawlerView
+from links.views import BrokerViewSet, LiveCrawlerView, HistoryCrawlerView, StockRecordStatsView, StockMainForceCrawlerView
 
 router = DefaultRouter()
 router.register(r'brokers', BrokerViewSet)
@@ -8,9 +8,8 @@ router.register(r'brokers', BrokerViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('crawler/live/', LiveCrawlerView.as_view(), name='live-crawler'),
-    path('crawler/main-force/', MainForceCrawlerView.as_view(), name='main-force-crawler'),
-    path('crawler/stock-main-force/', StockMainForceCrawlerView.as_view(), name='stock-main-force-crawler'),
+    path('crawler/stock-main-force/', StockMainForceCrawlerView.as_view(),
+         name='stock-main-force-crawler'),
     path('crawler/history/', HistoryCrawlerView.as_view(), name='history-crawler'),
     path('records/stats/', StockRecordStatsView.as_view(), name='record-stats'),
 ]
-
