@@ -34,13 +34,21 @@ class LiveCrawlerView(views.APIView):
             histock_link = generate_histock_link(
                 number, broker.stock_bno) if number else ""
 
-            # Fetch specific stats for the searched stock number at this broker
+            # 1. Fetch daily top data first to get the current trading date
+            try:
+                buy_data, date, sell_data = get_merged_data(
+                    broker.fbs_a, broker.fbs_b, broker.name)
+            except Exception as e:
+                print(f"Error crawling daily data for {broker.name}: {e}")
+                buy_data, date, sell_data = [], "Error", []
+
+            # 2. Fetch specific stats for the searched stock number using the same date
             specific_stats = None
-            if number:
+            if number and date != "Error":
                 try:
-                    # Fetch from zco0 to ensure "any volume" is captured
+                    # Fetch from zco0 and filter by the identified date
                     data = get_main_force_merged_data(
-                        number, broker.fbs_a, broker.fbs_b)
+                        number, broker.fbs_a, broker.fbs_b, date)
                     if data:
                         net_val = data.get('net', 0)
                         specific_stats = {
@@ -54,13 +62,6 @@ class LiveCrawlerView(views.APIView):
                 except Exception as e:
                     print(
                         f"Error fetching specific stats for {number} at {broker.name}: {e}")
-
-            try:
-                buy_data, date, sell_data = get_merged_data(
-                    broker.fbs_a, broker.fbs_b, broker.name)
-            except Exception as e:
-                print(f"Error crawling data for {broker.name}: {e}")
-                buy_data, date, sell_data = [], "Error", []
 
             results.append({
                 "broker_name": broker.name,

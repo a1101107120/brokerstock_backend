@@ -120,14 +120,17 @@ def get_merged_data(a, b, broker_name):
     return filtered_buy, date, filtered_sell
 
 
-def fetch_fubon_zco0_data(link):
+def fetch_fubon_zco0_data(link, target_date_str=None):
+    if not target_date_str:
+        # Default to today in YYYY-MM-DD
+        target_date_str = datetime.now().strftime("%Y-%m-%d")
+
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     try:
         response = requests.get(link, headers=headers, timeout=10)
         response.raise_for_status()
-        # The page might be encoded in Big5
         if response.encoding == 'ISO-8859-1':
             response.encoding = 'big5'
     except Exception as e:
@@ -136,41 +139,45 @@ def fetch_fubon_zco0_data(link):
 
     soup = BeautifulSoup(response.text, 'html.parser')
 
-    # Extract date - usually in a div with class 't11'
-    date = datetime.now().strftime("%Y-%m-%d")
-    date_div = soup.find('div', class_='t11')
-    if date_div:
-        date_match = re.search(r"(\d{4}/\d{1,2}/\d{1,2})", date_div.get_text())
-        if date_match:
-            date = date_match.group(1).replace('/', '-')
-
-    # Find the main table for broker data
-    # The structure of zco0.djhtm is a bit different
-    # We are looking for the table row that contains the broker's buy/sell for the stock
-    # Usually it's in a table with id 'oMainTable' or just the first large table
+    # The structure of zco0.djhtm is often a table where rows are dates or summary
+    # We look for a table with id 'oMainTable'
     table = soup.find('table', {'id': 'oMainTable'})
     if not table:
-        return {"buy": 0, "sell": 0, "net": 0, "date": date}
+        return {"buy": 0, "sell": 0, "net": 0, "date": target_date_str}
 
     rows = table.find_all('tr')
-    # Row 2 (index 2) usually contains the summarized data for the broker/stock
-    if len(rows) > 2:
-        tds = rows[2].find_all('td')
-        if len(tds) >= 4:
+
+    # Target date formats to check (e.g. "2025-12-30" or "2025/12/30")
+    target_date_slash = target_date_str.replace('-', '/')
+
+    for row in rows:
+        tds = row.find_all('td')
+        if len(tds) < 4:
+            continue
+
+        # Get text of the first cell (Date)
+        date_cell_text = tds[0].get_text().strip()
+
+        # Check if this row contains our target date in any of the common formats
+        if target_date_str in date_cell_text or target_date_slash in date_cell_text:
             try:
+                # Fubon zco0 typically: Date, Buy, Sell, Net, ...
                 buy = int(tds[1].text.strip().replace(",", ""))
                 sell = int(tds[2].text.strip().replace(",", ""))
                 net = int(tds[3].text.strip().replace(",", ""))
-                return {"buy": buy, "sell": sell, "net": net, "date": date}
-            except ValueError:
-                pass
+                return {"buy": buy, "sell": sell, "net": net, "date": target_date_str}
+            except (ValueError, IndexError) as e:
+                print(f"Error parsing zco0 row data: {e}")
+                continue
 
-    return {"buy": 0, "sell": 0, "net": 0, "date": date}
+    # Fallback: if no date match found in rows, check if there's a summary row
+    # or if we should just return 0s
+    return {"buy": 0, "sell": 0, "net": 0, "date": target_date_str}
 
 
-def get_main_force_merged_data(number, a, b):
+def get_main_force_merged_data(number, a, b, date_str=None):
     link = generate_fubon_link(number, a, b)
-    data = fetch_fubon_zco0_data(link)
+    data = fetch_fubon_zco0_data(link, date_str)
     return data
 
 
