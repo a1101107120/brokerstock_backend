@@ -4,7 +4,7 @@ from .serializers import BrokerSerializer, StockRecordSerializer
 from .utils.crawler import (
     generate_fubon_link, generate_fubon_detail_link, generate_histock_link,
     fetch_top_buyers, get_merged_data, find_previous_workdays_range,
-    get_main_force_merged_data
+    get_main_force_merged_data, fetch_stock_main_force_data
 )
 from django.db.models import Sum, F
 from datetime import datetime
@@ -89,6 +89,27 @@ class MainForceCrawlerView(views.APIView):
             "stock_number": number,
             "main_force_data": results
         })
+
+class StockMainForceCrawlerView(views.APIView):
+    def get(self, request):
+        number = request.query_params.get('number', '').strip()
+        if not number:
+            return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            data = fetch_stock_main_force_data(number)
+            if not data:
+                return response.Response({"error": "Failed to fetch stock main force data"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            return response.Response({
+                "stock_number": number,
+                "date": data["date"],
+                "buy_list": data["buy_list"],
+                "sell_list": data["sell_list"]
+            })
+        except Exception as e:
+            print(f"Error in StockMainForceCrawlerView: {e}")
+            return response.Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class HistoryCrawlerView(views.APIView):
     def get(self, request):

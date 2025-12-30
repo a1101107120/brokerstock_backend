@@ -161,6 +161,85 @@ def get_main_force_merged_data(number, a, b):
     data = fetch_fubon_zco0_data(link)
     return data
 
+def fetch_stock_main_force_data(stock_number):
+    link = f"https://fubon-ebrokerdj.fbs.com.tw/z/zc/zco/zco_{stock_number}.djhtm"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    try:
+        response = requests.get(link, headers=headers, timeout=10)
+        response.raise_for_status()
+        if response.encoding == 'ISO-8859-1':
+            response.encoding = 'big5'
+    except Exception as e:
+        print(f"Error fetching stock main force {link}: {e}")
+        return None
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Extract date
+    date = datetime.now().strftime("%Y-%m-%d")
+    date_div = soup.find('div', class_='t11')
+    if date_div:
+        date_match = re.search(r"(\d{4}/\d{1,2}/\d{1,2})", date_div.get_text())
+        if date_match:
+            date = date_match.group(1).replace('/', '-')
+
+    # The table with id 'oMainTable' contains the top buyers and sellers
+    table = soup.find('table', {'id': 'oMainTable'})
+    if not table:
+        return {"buy_list": [], "sell_list": [], "date": date}
+
+    rows = table.find_all('tr')
+    # Row 2 (index 2) contains two sub-tables: Buyers (left) and Sellers (right)
+    if len(rows) <= 2:
+        return {"buy_list": [], "sell_list": [], "date": date}
+
+    sub_tables = rows[2].find_all('table')
+    if len(sub_tables) < 2:
+        return {"buy_list": [], "sell_list": [], "date": date}
+
+    def parse_ranking_table(t):
+        items = []
+        r = t.find_all('tr')
+        for i, row in enumerate(r):
+            if i < 2: continue # Skip header rows
+            tds = row.find_all('td')
+            if len(tds) < 6: continue
+            
+            # Broker name usually inside GenLink2bkr script or just text
+            name = tds[0].text.strip()
+            script = tds[0].find('script')
+            if script:
+                m = re.search(r"GenLink2bkr\('([^']+)','([^']+)'\)", script.string)
+                if m:
+                    name = m.group(2)
+            
+            try:
+                buy = int(tds[1].text.strip().replace(',', ''))
+                sell = int(tds[2].text.strip().replace(',', ''))
+                net = int(tds[3].text.strip().replace(',', ''))
+                percent = tds[4].text.strip()
+                items.append({
+                    "name": name,
+                    "buy": buy,
+                    "sell": sell,
+                    "net": net,
+                    "percent": percent
+                })
+            except (ValueError, IndexError):
+                continue
+        return items
+
+    buy_list = parse_ranking_table(sub_tables[0])
+    sell_list = parse_ranking_table(sub_tables[1])
+
+    return {
+        "buy_list": buy_list,
+        "sell_list": sell_list,
+        "date": date
+    }
+
 def find_previous_workdays_range(date_str, num_workdays):
     if not date_str:
         print("Warning: find_previous_workdays_range received empty date_str.")
