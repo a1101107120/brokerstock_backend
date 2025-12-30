@@ -3,7 +3,8 @@ from .models import Broker, StockRecord
 from .serializers import BrokerSerializer, StockRecordSerializer
 from .utils.crawler import (
     generate_fubon_link, generate_fubon_detail_link, generate_histock_link,
-    fetch_top_buyers, get_merged_data, find_previous_workdays_range
+    fetch_top_buyers, get_merged_data, find_previous_workdays_range,
+    get_main_force_merged_data
 )
 from django.db.models import Sum, F
 from datetime import datetime
@@ -53,6 +54,40 @@ class LiveCrawlerView(views.APIView):
         return response.Response({
             "stock_number": number,
             "brokers_data": results
+        })
+
+class MainForceCrawlerView(views.APIView):
+    def get(self, request):
+        number = request.query_params.get('number', '').strip()
+        if not number:
+            return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
+            
+        brokers = Broker.objects.all()
+        if not brokers.exists():
+            return response.Response({"error": "No brokers found in database"}, status=status.HTTP_404_NOT_FOUND)
+            
+        results = []
+        for broker in brokers:
+            try:
+                data = get_main_force_merged_data(number, broker.fbs_a, broker.fbs_b)
+                results.append({
+                    "broker_name": broker.name,
+                    "buy": data["buy"],
+                    "sell": data["sell"],
+                    "net": data["net"],
+                    "date": data["date"],
+                    "fubon_link": generate_fubon_link(number, broker.fbs_a, broker.fbs_b),
+                    "histock_link": generate_histock_link(number, broker.stock_bno)
+                })
+            except Exception as e:
+                print(f"Error crawling main force data for {broker.name}: {e}")
+                
+        # Sort by net volume descending
+        results.sort(key=lambda x: x['net'], reverse=True)
+        
+        return response.Response({
+            "stock_number": number,
+            "main_force_data": results
         })
 
 class HistoryCrawlerView(views.APIView):

@@ -109,6 +109,58 @@ def get_merged_data(a, b, broker_name):
     
     return filtered_buy, date, filtered_sell
 
+def fetch_fubon_zco0_data(link):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    try:
+        response = requests.get(link, headers=headers, timeout=10)
+        response.raise_for_status()
+        # The page might be encoded in Big5
+        if response.encoding == 'ISO-8859-1':
+            response.encoding = 'big5'
+    except Exception as e:
+        print(f"Error fetching {link}: {e}")
+        return None
+
+    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    # Extract date - usually in a div with class 't11'
+    date = datetime.now().strftime("%Y-%m-%d")
+    date_div = soup.find('div', class_='t11')
+    if date_div:
+        date_match = re.search(r"(\d{4}/\d{1,2}/\d{1,2})", date_div.get_text())
+        if date_match:
+            date = date_match.group(1).replace('/', '-')
+
+    # Find the main table for broker data
+    # The structure of zco0.djhtm is a bit different
+    # We are looking for the table row that contains the broker's buy/sell for the stock
+    # Usually it's in a table with id 'oMainTable' or just the first large table
+    table = soup.find('table', {'id': 'oMainTable'})
+    if not table:
+        return {"buy": 0, "sell": 0, "net": 0, "date": date}
+
+    rows = table.find_all('tr')
+    # Row 2 (index 2) usually contains the summarized data for the broker/stock
+    if len(rows) > 2:
+        tds = rows[2].find_all('td')
+        if len(tds) >= 4:
+            try:
+                buy = int(tds[1].text.strip().replace(",", ""))
+                sell = int(tds[2].text.strip().replace(",", ""))
+                net = int(tds[3].text.strip().replace(",", ""))
+                return {"buy": buy, "sell": sell, "net": net, "date": date}
+            except ValueError:
+                pass
+                
+    return {"buy": 0, "sell": 0, "net": 0, "date": date}
+
+def get_main_force_merged_data(number, a, b):
+    link = generate_fubon_link(number, a, b)
+    data = fetch_fubon_zco0_data(link)
+    return data
+
 def find_previous_workdays_range(date_str, num_workdays):
     if not date_str:
         print("Warning: find_previous_workdays_range received empty date_str.")
