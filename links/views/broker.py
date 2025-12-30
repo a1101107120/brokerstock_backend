@@ -21,6 +21,10 @@ class LiveCrawlerView(views.APIView):
             return response.Response({"error": "No brokers found in database"}, status=status.HTTP_404_NOT_FOUND)
 
         results = []
+        total_buy = 0
+        total_sell = 0
+        total_net = 0
+
         for broker in brokers:
             fubon_link = generate_fubon_link(
                 number, broker.fbs_a, broker.fbs_b) if number else ""
@@ -28,6 +32,20 @@ class LiveCrawlerView(views.APIView):
                 broker.fbs_a, broker.fbs_b)
             histock_link = generate_histock_link(
                 number, broker.stock_bno) if number else ""
+
+            # Fetch specific stats for the searched stock number at this broker
+            specific_stats = None
+            if number:
+                try:
+                    specific_stats = get_main_force_merged_data(
+                        number, broker.fbs_a, broker.fbs_b)
+                    if specific_stats:
+                        total_buy += specific_stats.get('buy', 0)
+                        total_sell += specific_stats.get('sell', 0)
+                        total_net += specific_stats.get('net', 0)
+                except Exception as e:
+                    print(
+                        f"Error fetching specific stats for {number} at {broker.name}: {e}")
 
             try:
                 buy_data, date, sell_data = get_merged_data(
@@ -43,6 +61,7 @@ class LiveCrawlerView(views.APIView):
                 "histock_link": histock_link,
                 "buy_data": buy_data,
                 "sell_data": sell_data,
+                "specific_stats": specific_stats,
                 "date": date,
                 "stock_bno": broker.stock_bno,
                 "fbs_a": broker.fbs_a,
@@ -51,7 +70,12 @@ class LiveCrawlerView(views.APIView):
 
         return response.Response({
             "stock_number": number,
-            "brokers_data": results
+            "brokers_data": results,
+            "total_stats": {
+                "buy": total_buy,
+                "sell": total_sell,
+                "net": total_net
+            } if number else None
         })
 
 
