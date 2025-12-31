@@ -198,8 +198,9 @@ class StockMainForceCrawlerView(views.APIView):
         if not number:
             return response.Response({"error": "Stock number is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Get current date in YYYY-MM-DD format
-        date_str = datetime.now().strftime("%Y-%m-%d")
+        # Get date from query params, default to today
+        date_str = request.query_params.get(
+            'date', datetime.now().strftime("%Y-%m-%d"))
 
         try:
             data = fetch_stock_main_force_data(number, date_str)
